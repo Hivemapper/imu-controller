@@ -67,8 +67,8 @@ func (a *AngularRate) CamZ() float64 {
 */
 
 func (i *IIM42652) GetGyroscopeData() (*AngularRate, error) {
-	i.registerLock.Lock()
-	defer i.registerLock.Unlock()
+	// i.registerLock.Lock()
+	// defer i.registerLock.Unlock()
 
 	err := i.setBank(RegisterGyroscopeDataX1.Bank)
 	if err != nil {
