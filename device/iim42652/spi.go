@@ -3,10 +3,8 @@ package iim42652
 import (
 	"encoding/hex"
 	"fmt"
-	"sync"
 	"time"
 
-	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
@@ -19,8 +17,6 @@ type IIM42652 struct {
 	port                    spi.PortCloser
 	connection              spi.Conn
 	currentBank             Bank
-	interruptPin            gpio.PinIO
-	registerLock            sync.Mutex
 	accelerationSensitivity AccelerationSensitivity
 	gyroScale               GyroScale
 
@@ -65,6 +61,7 @@ func (i *IIM42652) Init() error {
 	i.connection = c
 	fmt.Println("SPI port connected:", i.deviceName)
 
+	// TODO: Implement GPIO interrupt if FIFO use is desired
 	// // Configure the GPIO pin for interrupts
 	// fmt.Println(spireg.All())
 	// fmt.Println(gpioreg.All())
@@ -152,11 +149,6 @@ func (i *IIM42652) Init() error {
 	}
 	fmt.Println("accelODR:", hex.EncodeToString([]byte{accelODR}))
 
-	// CAUTION: Currently not used(re-verify if used, likely previously setup up poorly)
-	// if err := i.SetupSignificantMotionDetection(); err != nil {
-	// 	return fmt.Errorf("setting up significant motion detection: %w", err)
-	// }
-
 	return nil
 }
 
@@ -207,8 +199,6 @@ func (i *IIM42652) setBank(b Bank) error {
 }
 
 func (i *IIM42652) WriteRegister(reg *Register, value byte) error {
-	// i.registerLock.Lock()
-	// defer i.registerLock.Unlock()
 
 	i.Debugf("Writing bank %q, reg %q: %s\n", reg.Bank, reg.Address, hex.EncodeToString([]byte{value}))
 
@@ -225,8 +215,6 @@ func (i *IIM42652) WriteRegister(reg *Register, value byte) error {
 }
 
 func (i *IIM42652) ReadRegister(reg *Register) (result byte, err error) {
-	// i.registerLock.Lock()
-	// defer i.registerLock.Unlock()
 
 	err = i.setBank(reg.Bank)
 	if err != nil {
@@ -241,7 +229,6 @@ func (i *IIM42652) ReadRegister(reg *Register) (result byte, err error) {
 		return 0x0, fmt.Errorf("writing to SPI port: %w", err)
 	}
 	result = r[1]
-	//i.Debugf("Read bank %q, reg %q: %s\n", reg.Bank, reg.Address, hex.EncodeToString(r[1:]))
 	return result, nil
 }
 

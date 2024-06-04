@@ -82,7 +82,7 @@ var (
 	RegisterOffsetUser0 = &Register{Bank: Bank4, Address: 0x77} // MPUREG_OFFSET_USER_0_B4
 	RegisterOffsetUser4 = &Register{Bank: Bank4, Address: 0x7B} // MPUREG_OFFSET_USER_4_B4
 
-	INTERRUPT_STATUS = &Register{Bank: Bank0, Address: 0x2D}
+	DATA_READY_INTERRUPT_STATUS = &Register{Bank: Bank0, Address: 0x2D}
 )
 
 const (
