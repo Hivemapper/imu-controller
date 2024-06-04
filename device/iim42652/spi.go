@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Hivemapper/hivemapper-data-logger/logger"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
@@ -19,18 +20,22 @@ type IIM42652 struct {
 	currentBank             Bank
 	accelerationSensitivity AccelerationSensitivity
 	gyroScale               GyroScale
+	DeviceType              logger.CamType
 
-	debug               bool
-	skipPowerManagement bool
+	debug bool
 }
 
-func NewSpi(device string, accelerationSensitivity AccelerationSensitivity, gyroScale GyroScale, debug bool, skipPowerManagement bool) *IIM42652 {
+func NewSpi(device string, accelerationSensitivity AccelerationSensitivity, gyroScale GyroScale, debug bool, deviceType string) *IIM42652 {
+	cam, err := logger.GetEnumFromString(deviceType)
+	if err != nil {
+		fmt.Println("Error getting device type: ", err)
+	}
 	return &IIM42652{
 		deviceName:              device,
 		accelerationSensitivity: accelerationSensitivity,
 		gyroScale:               gyroScale,
+		DeviceType:              cam,
 		debug:                   debug,
-		skipPowerManagement:     skipPowerManagement,
 	}
 }
 
@@ -76,11 +81,9 @@ func (i *IIM42652) Init() error {
 	// }
 
 	// Set up rest of IMU
-	if !i.skipPowerManagement {
-		err = i.SetupPower(GyroModeLowNoise | AccelerometerModeLowNoise)
-		if err != nil {
-			return fmt.Errorf("setting up power: %w", err)
-		}
+	err = i.SetupPower(GyroModeLowNoise | AccelerometerModeLowNoise)
+	if err != nil {
+		return fmt.Errorf("setting up power: %w", err)
 	}
 	// Keep as default SPI mode 0 (0x00)
 	err = i.WriteRegister(RegisterDeviceConfig, SPI_MODE_O)
