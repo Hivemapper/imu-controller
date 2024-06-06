@@ -25,7 +25,7 @@ type Acceleration struct {
 	TotalMagnitude float64
 }
 
-func NewAcceleration(x, y, z int16, sensitivity AccelerationSensitivity) *Acceleration {
+func ProcessNewAcceleration(x, y, z int16, sensitivity AccelerationSensitivity) *Acceleration {
 	accel := &Acceleration{
 		RawX: x,
 		RawY: y,
@@ -161,8 +161,8 @@ func (i *IIM42652) SetupSignificantMotionDetection() error {
 }
 
 func (i *IIM42652) GetAcceleration() (*Acceleration, error) {
-	i.registerLock.Lock()
-	defer i.registerLock.Unlock()
+	// i.registerLock.Lock()
+	// defer i.registerLock.Unlock()
 
 	err := i.setBank(RegisterAccelDataX1.Bank)
 	if err != nil {
@@ -180,6 +180,6 @@ func (i *IIM42652) GetAcceleration() (*Acceleration, error) {
 	y := int16(result[3])<<8 | int16(result[4])
 	z := int16(result[5])<<8 | int16(result[6])
 
-	acc := NewAcceleration(x, y, z, i.accelerationSensitivity)
+	acc := ProcessNewAcceleration(x, y, z, i.accelerationSensitivity)
 	return acc, nil
 }

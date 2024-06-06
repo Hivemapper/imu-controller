@@ -81,6 +81,8 @@ var (
 
 	RegisterOffsetUser0 = &Register{Bank: Bank4, Address: 0x77} // MPUREG_OFFSET_USER_0_B4
 	RegisterOffsetUser4 = &Register{Bank: Bank4, Address: 0x7B} // MPUREG_OFFSET_USER_4_B4
+
+	DATA_READY_INTERRUPT_STATUS = &Register{Bank: Bank0, Address: 0x2D}
 )
 
 const (
@@ -93,6 +95,34 @@ const (
 	ConfigScaleMask  byte  = 0x07
 	ConfigScaleShift uint8 = 5
 	ConfigRateMask   byte  = 0x0f
+)
+
+const (
+	SPI_MODE_O    byte = 0x00
+	SPI_SLEW_RATE byte = 0x05
+)
+
+// ODR Rates for IMU
+const (
+	IMU_ODR_32KHZ  byte = 0x01
+	IMU_ODR_16KHZ  byte = 0x02
+	IMU_ODR_8KHZ   byte = 0x03
+	IMU_ODR_4KHZ   byte = 0x04
+	IMU_ODR_2KHZ   byte = 0x05
+	IMU_ODR_1KHZ   byte = 0x06
+	IMU_ODR_200HZ  byte = 0x07
+	IMU_ODR_100HZ  byte = 0x08
+	IMU_ODR_50HZ   byte = 0x09
+	IMU_ODR_25HZ   byte = 0x0A
+	IMU_ODR_12_5HZ byte = 0x0B
+)
+
+const (
+	GYRO_ODR                     byte = IMU_ODR_100HZ
+	ACCEL_ODR                    byte = IMU_ODR_100HZ
+	GYRO_CALIBRATION_MAX_SAMPLES      = 200
+	// INTERRUPT STATUS MEASUREMENT READY VALUE
+	BIT_INT_STATUS_DRDY = 0x08
 )
 
 //const (
@@ -110,4 +140,9 @@ const (
 	Dps62_5
 	Dps31_25
 	Dps15_625
+)
+
+// Interrupts
+const (
+	GPIO_INT1 = 0
 )

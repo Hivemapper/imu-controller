@@ -3,9 +3,9 @@ package iim42652
 import (
 	"encoding/hex"
 	"fmt"
-	"sync"
 	"time"
 
+	"github.com/Hivemapper/hivemapper-data-logger/logger"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
@@ -18,21 +18,24 @@ type IIM42652 struct {
 	port                    spi.PortCloser
 	connection              spi.Conn
 	currentBank             Bank
-	registerLock            sync.Mutex
 	accelerationSensitivity AccelerationSensitivity
 	gyroScale               GyroScale
+	DeviceType              logger.CamType
 
-	debug               bool
-	skipPowerManagement bool
+	debug bool
 }
 
-func NewSpi(device string, accelerationSensitivity AccelerationSensitivity, gyroScale GyroScale, debug bool, skipPowerManagement bool) *IIM42652 {
+func NewSpi(device string, accelerationSensitivity AccelerationSensitivity, gyroScale GyroScale, debug bool, deviceType string) *IIM42652 {
+	cam, err := logger.GetEnumFromString(deviceType)
+	if err != nil {
+		fmt.Println("Error getting device type: ", err)
+	}
 	return &IIM42652{
 		deviceName:              device,
 		accelerationSensitivity: accelerationSensitivity,
 		gyroScale:               gyroScale,
+		DeviceType:              cam,
 		debug:                   debug,
-		skipPowerManagement:     skipPowerManagement,
 	}
 }
 
@@ -61,69 +64,93 @@ func (i *IIM42652) Init() error {
 		return fmt.Errorf("connecting to SPI port %q: %w", i.deviceName, err)
 	}
 	i.connection = c
+	fmt.Println("SPI port connected:", i.deviceName)
 
-	if !i.skipPowerManagement {
-		err = i.SetupPower(GyroModeLowNoise | AccelerometerModeLowNoise)
-		if err != nil {
-			return fmt.Errorf("setting up power: %w", err)
-		}
+	// TODO: Implement GPIO interrupt if FIFO use is desired
+	// // Configure the GPIO pin for interrupts
+	// fmt.Println(spireg.All())
+	// fmt.Println(gpioreg.All())
+	// pinName := fmt.Sprintf("GPIO%d", GPIO_INT1)
+	// i.interruptPin = gpioreg.ByName(pinName)
+	// if i.interruptPin == nil {
+	// 	return fmt.Errorf("failed to find GPIO pin %d", GPIO_INT1)
+	// }
+
+	// if err := i.interruptPin.In(gpio.PullUp, gpio.FallingEdge); err != nil {
+	// 	return fmt.Errorf("failed to set pin to input mode: %w", err)
+	// }
+
+	// Set up rest of IMU
+	err = i.SetupPower(GyroModeLowNoise | AccelerometerModeLowNoise)
+	if err != nil {
+		return fmt.Errorf("setting up power: %w", err)
 	}
-
-	err = i.WriteRegister(RegisterDeviceConfig, 0x00)
+	// Keep as default SPI mode 0 (0x00)
+	err = i.WriteRegister(RegisterDeviceConfig, SPI_MODE_O)
 	if err != nil {
 		return fmt.Errorf("setting deviceConfig: %w", err)
 	}
 	time.Sleep(time.Second)
 
-	pwrManagement, err := i.ReadRegister(RegisterPwrMgmt0)
-	if err != nil {
-		return fmt.Errorf("getting pwrManagement: %w", err)
-	}
-	fmt.Println("pwrManagement:", hex.EncodeToString([]byte{pwrManagement}))
-
 	deviceConfig, err := i.ReadRegister(RegisterDeviceConfig)
 	if err != nil {
 		return fmt.Errorf("getting deviceConfig: %w", err)
 	}
-	fmt.Println("deviceConfig:", hex.EncodeToString([]byte{deviceConfig}))
+	fmt.Println("IMU: deviceConfig->", hex.EncodeToString([]byte{deviceConfig}))
+
+	// Write SPI_SLEW_RATE
+	// err = i.WriteRegister(RegisterDriveConfig, SPI_SLEW_RATE)
+	// if err != nil {
+	// 	return fmt.Errorf("setting driveConfig: %w", err)
+	// }
+	// time.Sleep(time.Second)
 
 	driveConfig, err := i.ReadRegister(RegisterDriveConfig)
 	if err != nil {
 		return fmt.Errorf("getting driveConfig: %w", err)
 	}
-	fmt.Println("driveConfig:", hex.EncodeToString([]byte{driveConfig}))
+	fmt.Println("IMU: driveConfig->", hex.EncodeToString([]byte{driveConfig}))
 
-	if err := i.SetupSignificantMotionDetection(); err != nil {
-		return fmt.Errorf("setting up significant motion detection: %w", err)
+	// Calibrate and set gyro
+	i.CalibrateGyro(GYRO_CALIBRATION_MAX_SAMPLES)
+
+	// Set ODR of gyro
+	gyroODR, err := i.ReadRegister(RegisterGyroscopeConfig0)
+	if err != nil {
+		return fmt.Errorf("getting gyroODR: %w", err)
+	}
+	if gyroODR != GYRO_ODR {
+		err = i.WriteRegister(RegisterGyroscopeConfig0, GYRO_ODR)
+		if err != nil {
+			return fmt.Errorf("setting gyroODR: %w", err)
+		}
+		fmt.Println("gyroODR:", hex.EncodeToString([]byte{gyroODR}))
 	}
 
-	//r1 := make([]byte, 2)
-	//err = c.Tx([]byte{AccelConfig0Reg, ConfigRateMask | 0x09}, r1)
-	//if err != nil {
-	//	return fmt.Errorf("setting AccelConfig0Reg: %w", err)
-	//}
-	//fmt.Println("R1:", hex.EncodeToString(r1))
-	//time.Sleep(250 * time.Millisecond)
+	// Set ODR of accel
+	accelODR, err := i.ReadRegister(RegisterAccelConfig)
+	if err != nil {
+		return fmt.Errorf("getting accelODR: %w", err)
+	}
+	if accelODR != ACCEL_ODR {
+		err = i.WriteRegister(RegisterAccelConfig, ACCEL_ODR)
+		if err != nil {
+			return fmt.Errorf("setting accelODR: %w", err)
+		}
+	}
 
-	//result := make([]byte, 1)
-	//err = c.Tx([]byte{ReadMask | AccelConfig0Reg}, result)
-	//if err != nil {
-	//	return fmt.Errorf("reading AccelConfig0Reg: %w", err)
-	//}
-	//fmt.Println("WTF???:", hex.EncodeToString(result))
+	// Check ODR values here
+	gyroODR, err = i.ReadRegister(RegisterGyroscopeConfig0)
+	if err != nil {
+		return fmt.Errorf("getting gyroODR: %w", err)
+	}
+	fmt.Println("gyroODR:", hex.EncodeToString([]byte{gyroODR}))
 
-	//result := make([]byte, 1)
-	//err = c.Tx([]byte{ReadMask | RegisterPwrMgmt0}, result)
-	//if err != nil {
-	//	return fmt.Errorf("reading RegisterPwrMgmt0: %w", err)
-	//}
-	//fmt.Println("RegisterPwrMgmt0:", hex.EncodeToString(result))
-	//if result[0] == GyroModeLowNoise|AccelerometerModeLowNoise {
-	//	fmt.Println("IMU devices powered on!")
-	//} else {
-	//	fmt.Println("Failed to power on IMU devices...")
-	//	return fmt.Errorf("failed to power on IMU devices")
-	//}
+	accelODR, err = i.ReadRegister(RegisterAccelConfig)
+	if err != nil {
+		return fmt.Errorf("getting accelODR: %w", err)
+	}
+	fmt.Println("accelODR:", hex.EncodeToString([]byte{accelODR}))
 
 	return nil
 }
@@ -140,7 +167,7 @@ func (i *IIM42652) SetupPower(pwrMode byte) error {
 		return fmt.Errorf("getting pwrManagement: %w", err)
 	}
 	if pwrManagement == GyroModeLowNoise|AccelerometerModeLowNoise {
-		fmt.Println("IMU devices powered on!")
+		fmt.Println("IMU devices powered on in Low Noise Mode! ")
 	} else {
 		return fmt.Errorf("failed to power on IMU devices")
 	}
@@ -175,8 +202,6 @@ func (i *IIM42652) setBank(b Bank) error {
 }
 
 func (i *IIM42652) WriteRegister(reg *Register, value byte) error {
-	i.registerLock.Lock()
-	defer i.registerLock.Unlock()
 
 	i.Debugf("Writing bank %q, reg %q: %s\n", reg.Bank, reg.Address, hex.EncodeToString([]byte{value}))
 
@@ -193,8 +218,6 @@ func (i *IIM42652) WriteRegister(reg *Register, value byte) error {
 }
 
 func (i *IIM42652) ReadRegister(reg *Register) (result byte, err error) {
-	i.registerLock.Lock()
-	defer i.registerLock.Unlock()
 
 	err = i.setBank(reg.Bank)
 	if err != nil {
@@ -209,7 +232,6 @@ func (i *IIM42652) ReadRegister(reg *Register) (result byte, err error) {
 		return 0x0, fmt.Errorf("writing to SPI port: %w", err)
 	}
 	result = r[1]
-	//i.Debugf("Read bank %q, reg %q: %s\n", reg.Bank, reg.Address, hex.EncodeToString(r[1:]))
 	return result, nil
 }
 

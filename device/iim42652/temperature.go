@@ -11,8 +11,8 @@ func NewTemperature(t float64) Temperature {
 }
 
 func (i *IIM42652) GetTemperature() (Temperature, error) {
-	i.registerLock.Lock()
-	defer i.registerLock.Unlock()
+	// i.registerLock.Lock()
+	// defer i.registerLock.Unlock()
 
 	err := i.setBank(RegisterTemperatureData.Bank)
 	if err != nil {
